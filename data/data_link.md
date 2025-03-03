@@ -16,7 +16,13 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
        - `Code_departement`, `Code_region`, `annee`, `indicateur` (*ex. : Homicides, Usage de stupéfiants*), `unite_de_compte` (*ex. : Victime, Mis en cause*), `nombre`, `taux_pour_mille`, `insee_pop`, `insee_pop_millesime`, `insee_log`, `insee_log_millesime`.
 
 3. **Revenu moyen par habitant**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+   - **Fichier** : `PIB_regionaux_1990-2022.xlsx`  
+      - *Colonnes pertinentes* :  
+         - `Région`  
+         - `Année`  
+         - `PIB` (*Produit Intérieur Brut régional en millions d’euros*)  
+         - `PIB par habitant` (*PIB ajusté en fonction de la population*)  
+         - `Taux de croissance` (*variation annuelle du PIB*)  
 
 4. **Résultats des précédentes élections**  
    - **Fichier** : `resultats-par-niveau-cirlg-t2-france-entiere`  
@@ -27,13 +33,7 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
        - `Inscrits`, `Abstentions`, `% Abs/Ins`, `Votants`, `% Vot/Ins`, `Blancs`, `Nuls`, `Exprimés`, `% Exp/Ins`, `% Exp/Vot`, `Voix(1)/(2)`, `% Voix/Ins(1)/(2)`, `% Voix/Exp(1)/(2)`.
 
 5. **Condition économique**
-   - **Fichier** : `PIB_regionaux_1990-2022.xlsx`  
-      - *Colonnes pertinentes* :  
-         - `Région`  
-         - `Année`  
-         - `PIB` (*Produit Intérieur Brut régional en millions d’euros*)  
-         - `PIB par habitant` (*PIB ajusté en fonction de la population*)  
-         - `Taux de croissance` (*variation annuelle du PIB*)  
+   *Non présent dans les colonnes de ces deux fichiers.* 
 
 6. **Taux Immigration**  
    *Non présent dans les colonnes de ces deux fichiers.*

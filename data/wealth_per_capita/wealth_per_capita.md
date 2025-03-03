@@ -1,11 +1,3 @@
-Voici le fichier Markdown généré en fonction des données fournies :
-
-# Données de Criminalité par Région et Année
-
-Ce document présente les données de criminalité estimées pour chaque région française sur plusieurs années.
-
----
-
 ## Structure du Tableau
 
 | Région                   | Année (1990 - 2022)                                                                                   |
