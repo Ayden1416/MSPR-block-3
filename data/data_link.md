@@ -30,7 +30,9 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
    *Non présent dans les colonnes de ces deux fichiers.*
 
 7. **Âge moyen**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+   - **Fichier** : `population-departements-france-2024.csv`  
+     - *Colonnes pertinentes* :  
+       - `Départements`, `Nom_département`, `Total_ensemble`, `Ensemble_0_4_ans`, `Ensemble_5_9_ans`, `Ensemble_10_14_ans`, `Ensemble_15_19_ans`, `Ensemble_20_24_ans`, `Ensemble_25_29_ans`, `Ensemble_30_34_ans`, `Ensemble_35_39_ans`, `Ensemble_40_44_ans`, `Ensemble_45_49_ans`, `Ensemble_50_54_ans`, `Ensemble_55_59_ans`, `Ensemble_60_64_ans`, `Ensemble_65_69_ans`, `Ensemble_70_74_ans`, `Ensemble_75_79_ans`, `Ensemble_80_84_ans`, `Ensemble_85_89_ans`, `Ensemble_90_94_ans`, `Ensemble_95_ans_plus`.
 
 8. **Niveau d’éducation moyen**  
    *Non présent dans les colonnes de ces deux fichiers.*
