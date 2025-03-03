@@ -5,7 +5,10 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
 ---
 
 1. **Taux de chômage**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+   - **Fichier** : `donnee-banque-france-2024-trimestre.csv`  
+     - *Colonnes pertinentes* :  
+       - `Libellé` (*ex. : Taux de chômage localisé par région*), `idBank`, `Dernière mise à jour`, `Période` (facultatif),  
+       - Colonnes trimestrielles sous la forme `AAAA-TX` (*ex. : 2023-T4, 2024-T1*), où chaque valeur représente l’indicateur économique mesuré pour le trimestre correspondant.
 
 2. **Criminalité**  
    - **Fichier** : `donnee-dep-data.gouv-2024-geographie2024-produit-le2025-01-26.csv`  
