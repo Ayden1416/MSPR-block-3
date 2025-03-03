@@ -26,8 +26,14 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
      - *Colonnes pertinentes* :  
        - `Inscrits`, `Abstentions`, `% Abs/Ins`, `Votants`, `% Vot/Ins`, `Blancs`, `Nuls`, `Exprimés`, `% Exp/Ins`, `% Exp/Vot`, `Voix(1)/(2)`, `% Voix/Ins(1)/(2)`, `% Voix/Exp(1)/(2)`.
 
-5. **Condition économique**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+5. **Condition économique**
+   - **Fichier** : `PIB_regionaux_1990-2022.xlsx`  
+      - *Colonnes pertinentes* :  
+         - `Région`  
+         - `Année`  
+         - `PIB` (*Produit Intérieur Brut régional en millions d’euros*)  
+         - `PIB par habitant` (*PIB ajusté en fonction de la population*)  
+         - `Taux de croissance` (*variation annuelle du PIB*)  
 
 6. **Taux Immigration**  
    *Non présent dans les colonnes de ces deux fichiers.*
@@ -41,5 +47,10 @@ Cette section indique, pour chaque critère, s’il est présent et dans quel(s)
    *Non présent dans les colonnes de ces deux fichiers.*
 
 9. **Cote actuelle / opinion publique / favoris**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+   Remplir manuellment en les parties politique en fonction du nom du concurrent, example ->
+
+10. **Accès aux services publics (santé, éducation, transport)**
+	•	Nombre de médecins pour 1 000 habitants
+	•	Nombre d’écoles ou de lycées par région
+	•	Densité du réseau de transport en commun
 
