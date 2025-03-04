@@ -3,6 +3,7 @@ from data.criminality.get_cleaned_data import get_cleaned_data as get_criminalit
 from data.elections.get_cleaned_data import get_cleaned_data as get_elections_data
 from data.unemployment.get_cleaned_data import get_cleaned_data as get_unemployment_data
 from data.wealth_per_capita.get_cleaned_data import get_cleaned_data as get_wealth_data
+from data.immigration.get_cleaned_data import get_cleaned_data as get_immigration_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -90,6 +91,20 @@ if __name__ == "__main__":
     #     }
     # }
     
+    immigration_data = get_immigration_data()
+    # Example of immigration_data structure:
+    # {
+    #     '2017': {
+    #         '01': 5.401924,  # (float) immigration percentage for department 01
+    #         '02': 1.765449,
+    #         # ... other departments
+    #     },
+    #     '2021': {
+    #         '01': 12.062011,
+    #         # ... other departments
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -122,6 +137,7 @@ if __name__ == "__main__":
             abstention_pct = election_dept_data.get("abstentions_pct", None)
             unemployment_rate = unemployment_data.get(year, {}).get(dept_code, None)
             wealth_per_capita = wealth_data.get(year, {}).get(dept_code, None)
+            immigration_rate = immigration_data.get(year, {}).get(dept_code, None)
             
             # Construire la ligne de données
             row = {
@@ -133,6 +149,7 @@ if __name__ == "__main__":
                 "seniors": seniors,
                 "unemployment_rate": unemployment_rate,
                 "wealth_per_capita": wealth_per_capita,
+                "immigration_rate": immigration_rate,
                 "abstentions_pct": abstention_pct
             }
             

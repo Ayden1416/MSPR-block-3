@@ -10,3 +10,6 @@ ELECTIONS_T2_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t2-france
 UNEMPLOYMENT_DATASET = "data/unemployment/famille_TAUX-CHOMAGE_19122024.xlsx"
 
 WEALTH_DATASET = "data/wealth_per_capita/PIB_regionaux_1990-2022.xlsx"
+
+IMMIGRATION_2021_DATASET = "data/immigration/EM_DEPARTEMENTS_2021.xlsx"
+IMMIGRATION_2017_DATASET = "data/immigration/BTX_TD_IMG1A_2017.xlsx"
