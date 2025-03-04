@@ -1,6 +1,7 @@
 from data.age.get_cleaned_data import get_cleaned_data as get_age_data
 from data.criminality.get_cleaned_data import get_cleaned_data as get_criminality_data
 from data.elections.get_cleaned_data import get_cleaned_data as get_elections_data
+from data.unemployment.get_cleaned_data import get_cleaned_data as get_unemployment_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -60,6 +61,20 @@ if __name__ == "__main__":
     #     }
     # }
     
+    unemployment_data = get_unemployment_data()
+    # Example of unemployment_data structure:
+    # {
+    #     '2017': {
+    #         '01': 6.8,  # (float) unemployment rate for department 01
+    #         '02': 13.2,
+    #         # ... other departments
+    #     },
+    #     '2022': {
+    #         '01': 5.4,
+    #         # ... other departments
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -91,6 +106,8 @@ if __name__ == "__main__":
             vote_pct = election_dept_data.get("resultats_partis_pct", {})
             abstention_pct = election_dept_data.get("abstentions_pct", None)
             
+            unemployment_rate = unemployment_data.get(year, {}).get(dept_code, None)
+            
             # Construire la ligne de données
             row = {
                 "department_code": dept_code,
@@ -99,6 +116,7 @@ if __name__ == "__main__":
                 "adults": adults,
                 "seniors": seniors,
                 "year": year,
+                "unemployment_rate": unemployment_rate,
                 "abstentions_pct": abstention_pct
             }
             

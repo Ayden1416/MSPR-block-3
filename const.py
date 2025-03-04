@@ -6,3 +6,5 @@ ELECTIONS_T1_2017_DATASET = "data/elections/Presidentielle_2017_Resultats_Tour_1
 ELECTIONS_T2_2017_DATASET = "data/elections/Presidentielle_2017_Resultats_Tour_2.xlsx"
 ELECTIONS_T1_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t1-france-entiere.xlsx"
 ELECTIONS_T2_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t2-france-entiere.xlsx"
+
+UNEMPLOYMENT_DATASET = "data/unemployment/famille_TAUX-CHOMAGE_19122024.xlsx"
