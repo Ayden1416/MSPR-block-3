@@ -2,6 +2,7 @@ from data.age.get_cleaned_data import get_cleaned_data as get_age_data
 from data.criminality.get_cleaned_data import get_cleaned_data as get_criminality_data
 from data.elections.get_cleaned_data import get_cleaned_data as get_elections_data
 from data.unemployment.get_cleaned_data import get_cleaned_data as get_unemployment_data
+from data.wealth_per_capita.get_cleaned_data import get_cleaned_data as get_wealth_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -75,6 +76,20 @@ if __name__ == "__main__":
     #     }
     # }
     
+    wealth_data = get_wealth_data()
+    # Example of wealth_data structure:
+    # {
+    #     '2017': {
+    #         '01': 33159.23,  # (float) GDP per capita for department 01
+    #         '02': 27188.15,
+    #         # ... other departments
+    #     },
+    #     '2022': {
+    #         '01': 34521.45,
+    #         # ... other departments
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -105,8 +120,8 @@ if __name__ == "__main__":
             election_dept_data = elections_data.get(year, {}).get(dept_code, {})
             vote_pct = election_dept_data.get("resultats_partis_pct", {})
             abstention_pct = election_dept_data.get("abstentions_pct", None)
-            
             unemployment_rate = unemployment_data.get(year, {}).get(dept_code, None)
+            wealth_per_capita = wealth_data.get(year, {}).get(dept_code, None)
             
             # Construire la ligne de données
             row = {
@@ -117,6 +132,7 @@ if __name__ == "__main__":
                 "seniors": seniors,
                 "year": year,
                 "unemployment_rate": unemployment_rate,
+                "wealth_per_capita": wealth_per_capita,
                 "abstentions_pct": abstention_pct
             }
             

@@ -8,3 +8,5 @@ ELECTIONS_T1_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t1-france
 ELECTIONS_T2_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t2-france-entiere.xlsx"
 
 UNEMPLOYMENT_DATASET = "data/unemployment/famille_TAUX-CHOMAGE_19122024.xlsx"
+
+WEALTH_DATASET = "data/wealth_per_capita/PIB_regionaux_1990-2022.xlsx"
