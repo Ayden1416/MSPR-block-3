@@ -126,11 +126,11 @@ if __name__ == "__main__":
             # Construire la ligne de données
             row = {
                 "department_code": dept_code,
+                "year": year,
                 "criminality_indice": crime_rate,
                 "childs": childs,
                 "adults": adults,
                 "seniors": seniors,
-                "year": year,
                 "unemployment_rate": unemployment_rate,
                 "wealth_per_capita": wealth_per_capita,
                 "abstentions_pct": abstention_pct
