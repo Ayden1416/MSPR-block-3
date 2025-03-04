@@ -1,2 +1,8 @@
 AGE_DATASET = "data/age/estim-pop-dep-sexe-aq-1975-2023.xls"
+
 CRIMINALITY_DATASET = "data/criminality/donnee-dep-data.gouv-2024-geographie2024-produit-le2025-01-26.csv"
+
+ELECTIONS_T1_2017_DATASET = "data/elections/Presidentielle_2017_Resultats_Tour_1.xlsx"
+ELECTIONS_T2_2017_DATASET = "data/elections/Presidentielle_2017_Resultats_Tour_2.xlsx"
+ELECTIONS_T1_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t1-france-entiere.xlsx"
+ELECTIONS_T2_2022_DATASET = "data/elections/resultats-par-niveau-cirlg-t2-france-entiere.xlsx"

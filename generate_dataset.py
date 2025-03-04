@@ -1,5 +1,6 @@
 from data.age.get_cleaned_data import get_cleaned_data as get_age_data
 from data.criminality.get_cleaned_data import get_cleaned_data as get_criminality_data
+from data.elections.get_cleaned_data import get_cleaned_data as get_elections_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -33,6 +34,32 @@ if __name__ == "__main__":
     #     }
     # }
     
+    elections_data = get_elections_data()
+    # Example of elections_data structure:
+    # {
+    #     '2017': {
+    #         '76': {  # department code
+    #             'resultats_partis': {  # raw vote counts
+    #                 'DLF': 9910.8,
+    #                 'LFI': 45718.2,
+    #                 # ... other parties
+    #             },
+    #             'resultats_partis_pct': {  # vote percentages
+    #                 'DLF': 1.60,
+    #                 'LFI': 7.40,
+    #                 # ... other parties
+    #             },
+    #             'parti_gagnant': 'Renaissance',
+    #             'abstentions': 201318.7,
+    #             'abstentions_pct': 24.58
+    #         },
+    #         # ... other departments
+    #     },
+    #     '2022': {
+    #         # similar structure
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -59,18 +86,44 @@ if __name__ == "__main__":
             if dept_code not in METROPOLITAN_DEPTS:
                 continue
             
-            rows.append({
+            # Récupérer les données électorales pour le département et l'année correspondante
+            election_dept_data = elections_data.get(year, {}).get(dept_code, {})
+            vote_pct = election_dept_data.get("resultats_partis_pct", {})
+            abstention_pct = election_dept_data.get("abstentions_pct", None)
+            
+            # Construire la ligne de données
+            row = {
                 "department_code": dept_code,
                 "criminality_indice": crime_rate,
                 "childs": childs,
                 "adults": adults,
                 "seniors": seniors,
-                "year": year
-            })
+                "year": year,
+                "abstentions_pct": abstention_pct
+            }
+            
+            # Ajouter les pourcentages de vote pour chaque parti
+            for party, pct in vote_pct.items():
+                row[f"vote_pct_{party}"] = pct
+            
+            rows.append(row)
     
     # Création d'un DataFrame pandas avec les données fusionnées
     df = pd.DataFrame(rows)
     
-    # Exporter le DataFrame dans un fichier Excel sans index
-    df.to_excel("dataset.xlsx", index=False)
+    # Exporter le DataFrame dans un fichier Excel avec ajustement automatique des colonnes
+    with pd.ExcelWriter("dataset.xlsx", engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+        worksheet = writer.sheets['Sheet1']
+        for column in worksheet.columns:
+            max_length = 0
+            column = [cell for cell in column]
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = (max_length + 8)
+            worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
     
