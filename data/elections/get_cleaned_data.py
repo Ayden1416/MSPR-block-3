@@ -27,6 +27,24 @@ CANDIDATS_PARTIS = {
     ('ZEMMOUR', 'Éric'): 'Reconquête',  # Reconquête
 }
 
+PARTIS_ORIENTATION = {
+    'LO': 'Gauche',
+    'NPA': 'Gauche',
+    'LFI': 'Gauche',
+    'PCF': 'Gauche',
+    'PS': 'Gauche',
+    'EELV': 'Gauche',
+    'Génération.s': 'Gauche',
+    'Renaissance': 'Centre',
+    'UPR': 'Droite',
+    'SP': 'Droite',
+    'Résistons': 'Centre',
+    'LR': 'Droite',
+    'DLF': 'Droite',
+    'RN': 'Droite',
+    'Reconquête': 'Droite'
+}
+
 def get_cleaned_data():
     df_t1_2017 = pd.read_excel(ELECTIONS_T1_2017_DATASET, sheet_name="Départements Tour 1", header=HEADER_LINE)
     df_t2_2017 = pd.read_excel(ELECTIONS_T2_2017_DATASET, sheet_name="Départements Tour 2", header=HEADER_LINE)
@@ -86,12 +104,27 @@ def get_partis_result(dataset):
             for parti, voix in resultats_partis.items()
         }
         
+        # Calculer les résultats par orientation politique
+        resultats_orientation = {}
+        resultats_orientation_pct = {}
+        for parti, voix in resultats_partis.items():
+            orientation = PARTIS_ORIENTATION[parti]
+            resultats_orientation[orientation] = resultats_orientation.get(orientation, 0) + voix
+        
+        # Calculer les pourcentages pour chaque orientation
+        resultats_orientation_pct = {
+            orientation: (voix / total_votes * 100) if total_votes > 0 else 0
+            for orientation, voix in resultats_orientation.items()
+        }
+        
         # Trouver le parti gagnant
         parti_gagnant = max(resultats_partis.items(), key=lambda x: x[1])[0]
         resultats_par_dept[dept_code] = {
             'resultats_detailles': resultats_dept,
             'resultats_partis': resultats_partis,
             'resultats_partis_pct': resultats_partis_pct,
+            'resultats_orientation': resultats_orientation,
+            'resultats_orientation_pct': resultats_orientation_pct,
             'parti_gagnant': parti_gagnant,
             'abstentions': abstentions,
             'abstentions_pct': (abstentions / (abstentions + total_votes) * 100) if (abstentions + total_votes) > 0 else 0
@@ -123,9 +156,31 @@ def merge_results_weighted(results_t1, results_t2, poids_t1=0.3, poids_t2=0.7):
             total_global = total_votes + abstentions
             abstentions_pct = abstentions / total_global * 100 if total_global > 0 else 0
             
+            # Calculer les résultats par orientation politique
+            orientations = set()
+            for parti in partis:
+                orientations.add(PARTIS_ORIENTATION[parti])
+            
+            merged_orientations = {}
+            for orientation in orientations:
+                votes_orientation_t1 = sum(results_t1[dept]['resultats_partis'].get(parti, 0)
+                                        for parti in results_t1[dept]['resultats_partis']
+                                        if PARTIS_ORIENTATION[parti] == orientation)
+                votes_orientation_t2 = sum(results_t2[dept]['resultats_partis'].get(parti, 0)
+                                        for parti in results_t2[dept]['resultats_partis']
+                                        if PARTIS_ORIENTATION[parti] == orientation)
+                merged_orientations[orientation] = votes_orientation_t1 * poids_t1 + votes_orientation_t2 * poids_t2
+            
+            merged_orientation_pct = {
+                orientation: (votes / total_votes * 100 if total_votes > 0 else 0)
+                for orientation, votes in merged_orientations.items()
+            }
+            
             merged[dept] = {
                 'resultats_partis': merged_partis,
                 'resultats_partis_pct': merged_pct,
+                'resultats_orientation': merged_orientations,
+                'resultats_orientation_pct': merged_orientation_pct,
                 'parti_gagnant': parti_gagnant,
                 'abstentions': abstentions,
                 'abstentions_pct': abstentions_pct

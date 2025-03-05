@@ -52,6 +52,16 @@ if __name__ == "__main__":
     #                 'LFI': 7.40,
     #                 # ... other parties
     #             },
+    #             'resultats_orientation': {
+    #                 'DROITE': 10000,
+    #                 'GAUCHE': 20000,
+    #                 # ... other orientations
+    #             },
+    #             'resultats_orientation_pct': {
+    #                 'DROITE': 50.0,
+    #                 'GAUCHE': 50.0,
+    #                 # ... other orientations
+    #             },
     #             'parti_gagnant': 'Renaissance',
     #             'abstentions': 201318.7,
     #             'abstentions_pct': 24.58
@@ -134,6 +144,8 @@ if __name__ == "__main__":
             # Récupérer les données électorales pour le département et l'année correspondante
             election_dept_data = elections_data.get(year, {}).get(dept_code, {})
             vote_pct = election_dept_data.get("resultats_partis_pct", {})
+            vote_orientation_pct = election_dept_data.get("resultats_orientation_pct", {})
+            
             abstention_pct = election_dept_data.get("abstentions_pct", None)
             unemployment_rate = unemployment_data.get(year, {}).get(dept_code, None)
             wealth_per_capita = wealth_data.get(year, {}).get(dept_code, None)
@@ -152,6 +164,10 @@ if __name__ == "__main__":
                 "immigration_rate": immigration_rate,
                 "abstentions_pct": abstention_pct
             }
+            
+            # Ajouter les pourcentages d'orientation pour chaque parti
+            for orientation, pct in vote_orientation_pct.items():
+                row[f"vote_orientation_pct_{orientation}"] = pct
             
             # Ajouter les pourcentages de vote pour chaque parti
             for party, pct in vote_pct.items():

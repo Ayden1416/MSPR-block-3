@@ -32,7 +32,7 @@ Cette section indique, pour chaque critère, s'il est présent et dans quel(s) f
      - *Colonnes pertinentes* :  
        - `Inscrits`, `Abstentions`, `% Abs/Ins`, `Votants`, `% Vot/Ins`, `Blancs`, `Nuls`, `Exprimés`, `% Exp/Ins`, `% Exp/Vot`, `Voix(1)/(2)`, `% Voix/Ins(1)/(2)`, `% Voix/Exp(1)/(2)`.
 
-5. **Condition économique**
+5. **Prix de l'immobilier au m²**
    *Non présent dans les  colonnes de ces deux fichiers.* 
 
 6. **Taux Immigration**  
