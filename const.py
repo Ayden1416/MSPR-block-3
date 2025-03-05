@@ -13,3 +13,6 @@ WEALTH_DATASET = "data/wealth_per_capita/PIB_regionaux_1990-2022.xlsx"
 
 IMMIGRATION_2021_DATASET = "data/immigration/EM_DEPARTEMENTS_2021.xlsx"
 IMMIGRATION_2017_DATASET = "data/immigration/BTX_TD_IMG1A_2017.xlsx"
+
+REAL_ESTATE_2017_DATASET = "data/real_estate/Real Estate Indicators 2017.csv"
+REAL_ESTATE_2022_DATASET = "data/real_estate/Real Estate Indicators 2022.csv"

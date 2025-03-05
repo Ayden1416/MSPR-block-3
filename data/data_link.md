@@ -32,8 +32,16 @@ Cette section indique, pour chaque critère, s'il est présent et dans quel(s) f
      - *Colonnes pertinentes* :  
        - `Inscrits`, `Abstentions`, `% Abs/Ins`, `Votants`, `% Vot/Ins`, `Blancs`, `Nuls`, `Exprimés`, `% Exp/Ins`, `% Exp/Vot`, `Voix(1)/(2)`, `% Voix/Ins(1)/(2)`, `% Voix/Exp(1)/(2)`.
 
-5. **Prix de l'immobilier au m²**
-   *Non présent dans les  colonnes de ces deux fichiers.* 
+5. **Prix de l'immobilier au m²**  
+   - **Fichier** : `Real Estate Indicators 2017.csv`  
+     - *Colonnes pertinentes* :  
+       - `INSEE_COM` (Code INSEE de la commune)
+       - `Annee` (Année des transactions)
+       - `Prixm2Moyen` (Prix moyen au mètre carré des biens vendus en €)
+       - `PrixMoyen` (Prix moyen des biens immobiliers vendus en €)
+       - `NbMaisons`, `NbApparts` (Nombre de transactions par type de bien)
+       - `propmaison`, `propappart` (Proportion des types de biens en %)
+       - `SurfaceMoy` (Surface moyenne des biens vendus en m²)
 
 6. **Taux Immigration**  
    - **Fichier** : `EM_DEPARTEMENTS_2021.csv`

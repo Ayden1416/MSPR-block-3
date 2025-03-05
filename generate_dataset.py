@@ -4,6 +4,7 @@ from data.elections.get_cleaned_data import get_cleaned_data as get_elections_da
 from data.unemployment.get_cleaned_data import get_cleaned_data as get_unemployment_data
 from data.wealth_per_capita.get_cleaned_data import get_cleaned_data as get_wealth_data
 from data.immigration.get_cleaned_data import get_cleaned_data as get_immigration_data
+from data.real_estate.get_cleaned_data import get_cleaned_data as get_real_estate_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -115,6 +116,19 @@ if __name__ == "__main__":
     #     }
     # }
     
+    real_estate_data = get_real_estate_data()
+    # {
+    #     '2017': {
+    #         '01': 3.611, // Prixm2Moyen par département en 2017
+    #         '02': 3.062, // Prixm2Moyen par département en 2022
+    #         # ... other departments
+    #     },
+    #     '2022': {
+    #         '01': 3.733, // Prixm2Moyen par département en 2022
+    #         # ... other departments
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -150,6 +164,7 @@ if __name__ == "__main__":
             unemployment_rate = unemployment_data.get(year, {}).get(dept_code, None)
             wealth_per_capita = wealth_data.get(year, {}).get(dept_code, None)
             immigration_rate = immigration_data.get(year, {}).get(dept_code, None)
+            real_estate_price = real_estate_data.get(year, {}).get(dept_code, None)
             
             # Construire la ligne de données
             row = {
@@ -159,6 +174,7 @@ if __name__ == "__main__":
                 "childs": childs,
                 "adults": adults,
                 "seniors": seniors,
+                "average_price_per_m2": real_estate_price,
                 "unemployment_rate": unemployment_rate,
                 "wealth_per_capita": wealth_per_capita,
                 "immigration_rate": immigration_rate,
