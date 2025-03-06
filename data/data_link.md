@@ -62,14 +62,11 @@ Cette section indique, pour chaque critère, s'il est présent et dans quel(s) f
      - *Colonnes pertinentes* :  
        - `Départements`, `Nom_département`, `Total_ensemble`, `Ensemble_0_4_ans`, `Ensemble_5_9_ans`, `Ensemble_10_14_ans`, `Ensemble_15_19_ans`, `Ensemble_20_24_ans`, `Ensemble_25_29_ans`, `Ensemble_30_34_ans`, `Ensemble_35_39_ans`, `Ensemble_40_44_ans`, `Ensemble_45_49_ans`, `Ensemble_50_54_ans`, `Ensemble_55_59_ans`, `Ensemble_60_64_ans`, `Ensemble_65_69_ans`, `Ensemble_70_74_ans`, `Ensemble_75_79_ans`, `Ensemble_80_84_ans`, `Ensemble_85_89_ans`, `Ensemble_90_94_ans`, `Ensemble_95_ans_plus`.
 
-8. **Niveau d'éducation moyen**  
-   *Non présent dans les colonnes de ces deux fichiers.*
+8. **Densité de population**
+   - **Fichier** : `DENSITE-2012.csv`, `DENSITE-2017.csv`, `DENSITE-2022.csv`
 
-9. **Cote actuelle / opinion publique / favoris**  
-   Remplir manuellment en les parties politique en fonction du nom du concurrent, example ->
+9. **Revenus moyens**
+   - **Fichier** : `revenus_2012.csv`, `revenus_2017.csv`, `revenus_2022.csv`
 
-10. **Accès aux services publics (santé, éducation, transport)**
-	•	Nombre de médecins pour 1 000 habitants
-	•	Nombre d'écoles ou de lycées par région
-	•	Densité du réseau de transport en commun
-
+10. **Taux de natalité**
+   - **Fichier** : `mspr_natalite_2012.xlsx`, `mspr_natalite_2017.xlsx`, `mspr_natalite_2022.xlsx`
