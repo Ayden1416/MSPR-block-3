@@ -5,6 +5,7 @@ from data.unemployment.get_cleaned_data import get_cleaned_data as get_unemploym
 from data.wealth_per_capita.get_cleaned_data import get_cleaned_data as get_wealth_data
 from data.immigration.get_cleaned_data import get_cleaned_data as get_immigration_data
 from data.real_estate.get_cleaned_data import get_cleaned_data as get_real_estate_data
+from data.average_salary.get_cleaned_data import get_cleaned_data as get_average_salary_data
 import pandas as pd
 
 if __name__ == "__main__":
@@ -129,6 +130,23 @@ if __name__ == "__main__":
     #     }
     # }
     
+    average_salary_data = get_average_salary_data()
+    # {
+    #     '2012': {
+    #         '01': 25000,  # (int) average salary for department 01 in 2012
+    #         '02': 27000,
+    #         # ... other departments
+    #     },
+    #     '2017': {
+    #         '01': 28000,
+    #         # ... other departments
+    #     },
+    #     '2022': {
+    #         '01': 30000,
+    #         # ... other departments
+    #     }
+    # }
+    
     # Liste des départements de France métropolitaine (96 départements)
     METROPOLITAN_DEPTS = (
         [f"{i:02d}" for i in range(1, 96)]  # Départements 01-95
@@ -165,16 +183,18 @@ if __name__ == "__main__":
             wealth_per_capita = wealth_data.get(year, {}).get(dept_code, None)
             immigration_rate = immigration_data.get(year, {}).get(dept_code, None)
             real_estate_price = real_estate_data.get(year, {}).get(dept_code, None)
+            average_salary = average_salary_data.get(year, {}).get(dept_code, None)
             
             # Construire la ligne de données
             row = {
                 "department_code": dept_code,
                 "year": year,
-                "criminality_indice": crime_rate,
+                "criminality_indice": crime_rate,   
                 "childs": childs,
                 "adults": adults,
                 "seniors": seniors,
                 "average_price_per_m2": real_estate_price,
+                "average_salary": average_salary,
                 "unemployment_rate": unemployment_rate,
                 "wealth_per_capita": wealth_per_capita,
                 "immigration_rate": immigration_rate,

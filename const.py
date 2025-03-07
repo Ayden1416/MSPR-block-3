@@ -16,3 +16,7 @@ IMMIGRATION_2017_DATASET = "data/immigration/BTX_TD_IMG1A_2017.xlsx"
 
 REAL_ESTATE_2017_DATASET = "data/real_estate/Real Estate Indicators 2017.csv"
 REAL_ESTATE_2022_DATASET = "data/real_estate/Real Estate Indicators 2022.csv"
+
+AVERAGE_SALARY_2012_DATASET = "data/average_salary/revenus_2012.csv"
+AVERAGE_SALARY_2017_DATASET = "data/average_salary/revenus_2017.csv"
+AVERAGE_SALARY_2022_DATASET = "data/average_salary/revenus_2022.csv"
