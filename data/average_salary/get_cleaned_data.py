@@ -113,7 +113,6 @@ def get_cleaned_data():
   df_2017 = pd.read_csv(AVERAGE_SALARY_2017_DATASET)
   df_2022 = pd.read_csv(AVERAGE_SALARY_2022_DATASET)
 
-  # Map department names to codes
   df_2012['Département'] = df_2012['Département'].map(DEPARTMENT_CODE_MAPPING)
   df_2017['Département'] = df_2017['Département'].map(DEPARTMENT_CODE_MAPPING)
   df_2022['Département'] = df_2022['Département'].map(DEPARTMENT_CODE_MAPPING)

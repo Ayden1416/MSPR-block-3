@@ -4,7 +4,6 @@ from const import AGE_DATASET
 HEADER_LINE = 4  
 
 def get_cleaned_data():
-    # Lecture des feuilles 2017 et 2022 en utilisant la bonne ligne d'en-tête
     df_2017 = pd.read_excel(AGE_DATASET, sheet_name='2017', header=HEADER_LINE)
     df_2022 = pd.read_excel(AGE_DATASET, sheet_name='2022', header=HEADER_LINE)
 
@@ -21,16 +20,13 @@ def get_cleaned_data():
     ]
     
     def sum_categories(df):
-        # Filtrer uniquement les départements réels via la colonne 'Unnamed: 0'
         df["dept_numeric"] = pd.to_numeric(df["Unnamed: 0"], errors='coerce')
         df = df[(df["dept_numeric"] >= 1) & (df["dept_numeric"] <= 95)]
       
-        # Sélectionner uniquement les colonnes dont le nom correspond exactement aux intitulés attendus
         children_cols = [col for col in df.columns if col in children_ages]
         adult_cols    = [col for col in df.columns if col in adult_ages]
         senior_cols   = [col for col in df.columns if col in senior_ages]
 
-        # Calculer les sommes pour chaque catégorie
         return {
             "CHILDRENS": int(df[children_cols].sum().sum()),
             "ADULTS":    int(df[adult_cols].sum().sum()),

@@ -21,30 +21,24 @@ REGIONS_DEPARTMENTS = {
 }
 
 def get_cleaned_data():
-    # Lecture du fichier Excel
     df = pd.read_excel(WEALTH_DATASET, sheet_name="PIB par hab 1990-2022", header=HEADER_LINE)
     
-    regions = df.iloc[:, 0]  # Première colonne contenant les régions
+    regions = df.iloc[:, 0]
     
-    # Récupération des PIB pour 2017 et 2022
     pib_2017 = df[2017]
     pib_2022 = df[2022]
     
-    # Initialisation du résultat final avec une structure par année
     result = {
         '2017': {},
         '2022': {}
     }
     
-    # Pour chaque région, associer le PIB de la région à tous ses départements
     for region, pib17, pib22 in zip(regions, pib_2017, pib_2022):
-        # Récupérer la liste des départements pour cette région
         departments = REGIONS_DEPARTMENTS.get(region, [])
         for dept in departments:
             result['2017'][dept] = round(pib17, 0)
             result['2022'][dept] = pib22
     
-    # Trier les dictionnaires par clé (numéro de département)
     result['2017'] = dict(sorted(result['2017'].items()))
     result['2022'] = dict(sorted(result['2022'].items()))
             

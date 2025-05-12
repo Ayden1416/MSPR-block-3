@@ -72,10 +72,8 @@ def get_partis_result(dataset):
         resultats_dept = {}
         resultats_partis = {}
         
-        # Récupérer le nombre d'abstentions
         abstentions = row['Abstentions']
         
-        # Pour chaque candidat
         for i in range(len(CANDIDATS_PARTIS)):
             suffixe = f'.{i}' if i > 0 else ''
             nom_col = f'Nom{suffixe}'
@@ -95,29 +93,24 @@ def get_partis_result(dataset):
                         parti = CANDIDATS_PARTIS[candidat]
                         resultats_partis[parti] = resultats_partis.get(parti, 0) + voix
         
-        # Calculer le nombre total de votes exprimés
         total_votes = sum(resultats_partis.values())
         
-        # Calculer les pourcentages pour chaque parti
         resultats_partis_pct = {
             parti: (voix / total_votes * 100) if total_votes > 0 else 0
             for parti, voix in resultats_partis.items()
         }
         
-        # Calculer les résultats par orientation politique
         resultats_orientation = {}
         resultats_orientation_pct = {}
         for parti, voix in resultats_partis.items():
             orientation = PARTIS_ORIENTATION[parti]
             resultats_orientation[orientation] = resultats_orientation.get(orientation, 0) + voix
         
-        # Calculer les pourcentages pour chaque orientation
         resultats_orientation_pct = {
             orientation: (voix / total_votes * 100) if total_votes > 0 else 0
             for orientation, voix in resultats_orientation.items()
         }
         
-        # Trouver le parti gagnant
         parti_gagnant = max(resultats_partis.items(), key=lambda x: x[1])[0]
         resultats_par_dept[dept_code] = {
             'resultats_detailles': resultats_dept,
@@ -136,7 +129,6 @@ def merge_results_weighted(results_t1, results_t2, poids_t1=0.3, poids_t2=0.7):
     all_depts = set(results_t1.keys()) | set(results_t2.keys())
     for dept in all_depts:
         if dept in results_t1 and dept in results_t2:
-            # Fusionner les résultats des partis
             partis = set(results_t1[dept]['resultats_partis'].keys()) | set(results_t2[dept]['resultats_partis'].keys())
             merged_partis = {}
             for parti in partis:
@@ -151,12 +143,10 @@ def merge_results_weighted(results_t1, results_t2, poids_t1=0.3, poids_t2=0.7):
             }
             parti_gagnant = max(merged_partis.items(), key=lambda x: x[1])[0]
             
-            # Fusionner les abstentions de façon pondérée
             abstentions = results_t1[dept]['abstentions'] * poids_t1 + results_t2[dept]['abstentions'] * poids_t2
             total_global = total_votes + abstentions
             abstentions_pct = abstentions / total_global * 100 if total_global > 0 else 0
             
-            # Calculer les résultats par orientation politique
             orientations = set()
             for parti in partis:
                 orientations.add(PARTIS_ORIENTATION[parti])

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+import sqlite3
 
 from sklearn.model_selection import (
     train_test_split, KFold, cross_validate, GridSearchCV
@@ -26,34 +27,48 @@ from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 
-# -------------------------------------------------------------------
-# 0. CONFIGURATION CLI
-# -------------------------------------------------------------------
-parser = argparse.ArgumentParser()
-parser.add_argument("--data", default="dataset.xlsx",
-                    help="Chemin vers le fichier de données Excel/CSV")
+# Configuration
+DB_FILE = Path("data/dataset.sqlite")
+TABLE_NAME = "department_stats"
+
+# Paramètres généraux & ligne de commande
+parser = argparse.ArgumentParser(
+    description="Apprentissage multi‑modèles sur les stats départementales"
+)
 parser.add_argument("--seed", type=int, default=42,
-                    help="Random state à utiliser")
+                    help="Graine aléatoire pour la reproductibilité")
+parser.add_argument("--drop-threshold", type=float, default=0.40,
+                    metavar="[0‑1]",
+                    help="Au‑delà de ce pourcentage de NaN, on supprime la colonne")
+parser.add_argument("--print-width", type=int, default=110,
+                    help="Largeur (en colonnes) pour les audits NaN")
+
 args = parser.parse_args()
 
+# Constantes dérivées des arguments
+DROP_THRESHOLD = args.drop_threshold
+PRINT_WIDTH   = args.print_width
+
+# Pour les modèles + CV
 np.random.seed(args.seed)
 
-PRINT_WIDTH = 79          # pour des jolis prints :-)
-DROP_THRESHOLD = 0.90     # si >90 % de NaN → on drop la colonne
+# Lecture du jeu de données depuis SQLite
+if not DB_FILE.exists():
+    raise FileNotFoundError(
+        f"Impossible de trouver {DB_FILE.resolve()} – "
+        "assurez‑vous d’avoir exécuté le script de génération d’abord."
+    )
 
-# -------------------------------------------------------------------
-# 1. CHARGEMENT & PING
-# -------------------------------------------------------------------
-data_path = Path(args.data)
-if not data_path.exists():
-    sys.exit(f"[ERREUR] Fichier introuvable : {data_path}")
+with sqlite3.connect(DB_FILE) as conn:
+    query = f"SELECT * FROM {TABLE_NAME};"
+    df = pd.read_sql_query(query, conn)
 
-df = pd.read_excel(data_path) if data_path.suffix in {".xls", ".xlsx"} else pd.read_csv(data_path)
-print("Colonnes disponibles :", list(df.columns))
+df["department_code"] = df["department_code"].astype(str)
 
-# -------------------------------------------------------------------
-# 2. AUDIT MANQUANTS & NETTOYAGE
-# -------------------------------------------------------------------
+print(f"{len(df):,} lignes importées depuis {DB_FILE.name}")
+print(df.head())
+
+# Audit des NaN & nettoyage
 def audit_nan(frame: pd.DataFrame, title: str) -> None:
     nan_stats = frame.isnull().mean().mul(100).sort_values(ascending=False)
     print(f"\n{title}".center(PRINT_WIDTH, "="))
@@ -61,13 +76,13 @@ def audit_nan(frame: pd.DataFrame, title: str) -> None:
 
 audit_nan(df, "POURCENTAGE DE NaN AVANT NETTOYAGE")
 
-# 2.1 Colonnes trop vides → suppression
+# Colonnes trop vides → suppression
 too_empty = [c for c, pct in df.isnull().mean().items() if pct > DROP_THRESHOLD]
 if too_empty:
     print(f"\n[INFO] Suppression des colonnes trop vides (> {DROP_THRESHOLD*100:.0f}% NaN) :\n → {too_empty}")
     df = df.drop(columns=too_empty)
 
-# 2.2 Imputation
+# Imputation
 numeric_cols = df.select_dtypes(include="number").columns
 for col in numeric_cols:
     if df[col].isnull().any():
@@ -76,19 +91,19 @@ for col in numeric_cols:
 
 audit_nan(df, "POURCENTAGE DE NaN APRÈS IMPUTATION")
 
-# 2.3 Colonnes cibles & features
+# Colonnes cibles & features
 orientations = [
     "vote_orientation_pct_Gauche",
     "vote_orientation_pct_Droite",
     "vote_orientation_pct_Centre",
 ]
 
-# vérifier leur présence
+# Vérifier leur présence
 missing_targets = [o for o in orientations if o not in df.columns]
 if missing_targets:
     sys.exit(f"[ERREUR] Colonnes cibles manquantes : {missing_targets}")
 
-# -- NOUVEAU FILTRE : on retire toutes les colonnes électorales ----------------
+# Nouveau filtre : on retire toutes les colonnes électorales
 def is_electoral(col: str) -> bool:
     return col.startswith("vote_pct_") or col in orientations
 
@@ -98,9 +113,7 @@ feature_cols = [
 ]
 print(f"\nTotal features SOCIO‑ÉCO retenues : {len(feature_cols)}")
 
-# -------------------------------------------------------------------
-# 3. DÉFINITION DES MODÈLES
-# -------------------------------------------------------------------
+# Définition des modèles
 model_defs = {
     "RandomForest": RandomForestRegressor(
         n_estimators=400, max_depth=None, random_state=args.seed
@@ -135,9 +148,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-# -------------------------------------------------------------------
-# 4. ENTRAÎNEMENT + VALIDATION CROISÉE
-# -------------------------------------------------------------------
+# Entraînement + validation croisée
 scoring = {
     "mse": make_scorer(mean_squared_error, greater_is_better=False),
     "mae": make_scorer(mean_absolute_error, greater_is_better=False),
@@ -145,8 +156,8 @@ scoring = {
 }
 cv = KFold(n_splits=5, shuffle=True, random_state=args.seed)
 
-all_scores = []       # pour export CSV
-fitted_models = {}    # orientation → meilleur modèle (après GridSearch)
+all_scores = []
+fitted_models = {}
 
 for target in orientations:
     y = df[target]
@@ -179,9 +190,7 @@ for target in orientations:
         if mse_mean < best_mse:
             best_mse, best_model_name = mse_mean, name
 
-    # ----------------------------------------------------------------
-    # 4.1 GridSearch hyper‑paramètres sur le meilleur algo brut
-    # ----------------------------------------------------------------
+    # GridSearch sur le meilleur algo brut
     print(f"\n[GRID] Affinage hyper‑paramètres pour {target} avec {best_model_name}")
     if best_model_name == "RandomForest":
         param_grid = {
@@ -196,7 +205,7 @@ for target in orientations:
             "max_depth": [2, 3],
         }
     else:
-        param_grid = {}  # rien à optimiser ou peu pertinent
+        param_grid = {}
 
     base_model = model_defs[best_model_name]
     if param_grid:
@@ -212,32 +221,26 @@ for target in orientations:
 
     fitted_models[target] = best_model_fitted
 
-    # ----------------------------------------------------------------
-    # 4.2 Feature importances si dispo
-    # ----------------------------------------------------------------
+    # Feature importances si dispo
     if hasattr(best_model_fitted, "feature_importances_"):
         fi = (
             pd.Series(best_model_fitted.feature_importances_, index=feature_cols)
               .sort_values(ascending=False)
         )
-        fi.to_csv(f"feature_importance_{target}_{best_model_name}.csv")
+        fi.to_csv(f"annexes/feature_importance_{target}_{best_model_name}.csv")
         print(f"[INFO] feature_importance_{target}_{best_model_name}.csv sauvegardé")
 
-# -------------------------------------------------------------------
-# 5. EXPORT DES SCORES COMPARATIFS
-# -------------------------------------------------------------------
+# Export des scores comparatifs
 scores_df = pd.DataFrame(all_scores).sort_values(
     ["orientation", "mse"]
 ).reset_index(drop=True)
 
-scores_df.to_csv("model_scores.csv", index=False)
+scores_df.to_csv("annexes/model_scores.csv", index=False)
 print("\n=================  COMPARATIF (cross‑val. 5‑fold)  =================")
 print(scores_df.to_string(index=False, float_format=lambda x: f"{x:8.3f}"))
 print("\n(✓) Fichier 'model_scores.csv' exporté.")
 
-# -------------------------------------------------------------------
-# 6. PRÉDICTIONS GÉNÉRIQUES
-# -------------------------------------------------------------------
+# Prédictions génériques
 def predict_for_year(year: int, data: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for idx, row in data.iterrows():
@@ -258,3 +261,45 @@ pred_2027.to_csv("predictions_2027.csv", index=False)
 print("\n---------------- APERÇU PRÉDICTIONS 2027 ----------------")
 print(pred_2027.head())
 print("\n(✓) Fichier 'predictions_2027.csv' exporté.")
+
+# Génération des figures
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Corrélation (features + cibles)
+corr = df[feature_cols + orientations].corr()
+fig, ax = plt.subplots(figsize=(12,10))
+sns.heatmap(corr, cmap="coolwarm", center=0, annot=False, ax=ax)
+ax.set_title("Heatmap de corrélation features vs cibles")
+fig.savefig("figures/correlation_heatmap.png", dpi=300)
+print("Figure enregistrée → figures/correlation_heatmap.png")
+
+# Importance des variables pour chaque orientation
+for target, mdl in fitted_models.items():
+    if hasattr(mdl, "feature_importances_"):
+        fi = pd.Series(mdl.feature_importances_, index=feature_cols)\
+               .sort_values(ascending=False).head(20)
+        fig, ax = plt.subplots(figsize=(8,6))
+        fi.plot.bar(ax=ax)
+        ax.set_ylabel("Importance")
+        ax.set_title(f"Feature importances – {target}")
+        out = f"figures/feature_importance_{target}.png"
+        fig.tight_layout()
+        fig.savefig(out, dpi=300)
+        print(f"Figure enregistrée → {out}")
+
+# Réel vs Prédit (cross-val ou prédictions 2027)
+pred_2027 = pd.read_csv("predictions_2027.csv")
+for target in orientations:
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.scatter(df[target], pred_2027[target], alpha=0.6)
+    ax.plot([0,100],[0,100], "--", linewidth=1)
+    ax.set_xlabel("Valeurs réelles")
+    ax.set_ylabel("Prédictions 2027")
+    ax.set_title(f"Réel vs Prédit – {target}")
+    out = f"figures/real_vs_pred_{target}.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=300)
+    print(f"Figure enregistrée → {out}")
