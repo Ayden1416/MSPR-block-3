@@ -296,10 +296,10 @@ for target in orientations:
     fig, ax = plt.subplots(figsize=(6,6))
     ax.scatter(df[target], pred_2027[target], alpha=0.6)
     ax.plot([0,100],[0,100], "--", linewidth=1)
-    ax.set_xlabel("Valeurs réelles")
+    ax.set_xlabel("Valeurs historiques")
     ax.set_ylabel("Prédictions 2027")
-    ax.set_title(f"Réel vs Prédit – {target}")
-    out = f"figures/real_vs_pred_{target}.png"
+    ax.set_title(f"Historique vs Prédit – {target}")
+    out = f"figures/history_vs_pred_{target}.png"
     fig.tight_layout()
     fig.savefig(out, dpi=300)
     print(f"Figure enregistrée → {out}")

@@ -118,9 +118,9 @@ erDiagram
   * `figures/feature_importance_vote_orientation_pct_Centre.png`
   * `figures/feature_importance_vote_orientation_pct_Droite.png`
 * **Comparaison réelle vs prédite** :
-  * `figures/real_vs_pred_vote_orientation_pct_Gauche.png`
-  * `figures/real_vs_pred_vote_orientation_pct_Centre.png`
-  * `figures/real_vs_pred_vote_orientation_pct_Droite.png`
+  * `figures/history_vs_pred_vote_orientation_pct_Gauche.png`
+  * `figures/history_vs_pred_vote_orientation_pct_Centre.png`
+  * `figures/history_vs_pred_vote_orientation_pct_Droite.png`
 
 ![heatmap](../figures/correlation_heatmap.png)
 
