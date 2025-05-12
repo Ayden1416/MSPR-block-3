@@ -1,149 +1,260 @@
+#!/usr/bin/env python3
+# coding: utf-8
+"""
+learning_comparison.py – Évaluation multi‑modèles + prédictions 2027
+"""
+from __future__ import annotations
+import argparse
+import sys
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 
-# scikit-learn
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import (
+    train_test_split, KFold, cross_validate, GridSearchCV
+)
+from sklearn.metrics import (
+    mean_squared_error, mean_absolute_error, r2_score, make_scorer
+)
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.ensemble import (
+    RandomForestRegressor, GradientBoostingRegressor
+)
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.svm import SVR
+from sklearn.neighbors import KNeighborsRegressor
 
 # -------------------------------------------------------------------
-# 1. CHARGEMENT DU DATASET
+# 0. CONFIGURATION CLI
 # -------------------------------------------------------------------
-df = pd.read_excel("dataset.xlsx")
+parser = argparse.ArgumentParser()
+parser.add_argument("--data", default="dataset.xlsx",
+                    help="Chemin vers le fichier de données Excel/CSV")
+parser.add_argument("--seed", type=int, default=42,
+                    help="Random state à utiliser")
+args = parser.parse_args()
 
-# Vérifier les colonnes disponibles
-print("Colonnes disponibles :", df.columns)
+np.random.seed(args.seed)
+
+PRINT_WIDTH = 79          # pour des jolis prints :-)
+DROP_THRESHOLD = 0.90     # si >90 % de NaN → on drop la colonne
 
 # -------------------------------------------------------------------
-# 2. NETTOYAGE ET PRÉPARATION DES DONNÉES
+# 1. CHARGEMENT & PING
 # -------------------------------------------------------------------
-# Check for missing values before dropping
-print("Nombre de valeurs manquantes par colonne avant suppression :")
-print(df.isnull().sum())
+data_path = Path(args.data)
+if not data_path.exists():
+    sys.exit(f"[ERREUR] Fichier introuvable : {data_path}")
 
-# First fill missing values for specific columns
-df['average_price_per_m2'] = df['average_price_per_m2'].fillna(df['average_price_per_m2'].mean())
-df['immigration_rate'] = df['immigration_rate'].fillna(df['immigration_rate'].mean())
+df = pd.read_excel(data_path) if data_path.suffix in {".xls", ".xlsx"} else pd.read_csv(data_path)
+print("Colonnes disponibles :", list(df.columns))
 
-# For columns with a large number of missing values, decide on a strategy
-columns_with_many_nans = [
-    'vote_pct_UPR', 'vote_pct_Génération.s', 'vote_pct_SP',
-    'vote_pct_PCF', 'vote_pct_Reconquête', 'vote_pct_PS', 'vote_pct_EELV'
+# -------------------------------------------------------------------
+# 2. AUDIT MANQUANTS & NETTOYAGE
+# -------------------------------------------------------------------
+def audit_nan(frame: pd.DataFrame, title: str) -> None:
+    nan_stats = frame.isnull().mean().mul(100).sort_values(ascending=False)
+    print(f"\n{title}".center(PRINT_WIDTH, "="))
+    print(nan_stats.to_string(float_format=lambda x: f"{x:5.1f}%"))
+
+audit_nan(df, "POURCENTAGE DE NaN AVANT NETTOYAGE")
+
+# 2.1 Colonnes trop vides → suppression
+too_empty = [c for c, pct in df.isnull().mean().items() if pct > DROP_THRESHOLD]
+if too_empty:
+    print(f"\n[INFO] Suppression des colonnes trop vides (> {DROP_THRESHOLD*100:.0f}% NaN) :\n → {too_empty}")
+    df = df.drop(columns=too_empty)
+
+# 2.2 Imputation
+numeric_cols = df.select_dtypes(include="number").columns
+for col in numeric_cols:
+    if df[col].isnull().any():
+        fill_value = df[col].median() if df[col].skew() > 1 else df[col].mean()
+        df[col] = df[col].fillna(fill_value)
+
+audit_nan(df, "POURCENTAGE DE NaN APRÈS IMPUTATION")
+
+# 2.3 Colonnes cibles & features
+orientations = [
+    "vote_orientation_pct_Gauche",
+    "vote_orientation_pct_Droite",
+    "vote_orientation_pct_Centre",
 ]
-for col in columns_with_many_nans:
-    df[col] = df[col].fillna(0)
 
-# Fill missing values for orientation columns
-orientations = ['vote_orientation_pct_Gauche', 'vote_orientation_pct_Droite', 
-                'vote_orientation_pct_Centre']
-for orientation in orientations:
-    if orientation in df.columns:
-        df[orientation] = df[orientation].fillna(df[orientation].mean())
+# vérifier leur présence
+missing_targets = [o for o in orientations if o not in df.columns]
+if missing_targets:
+    sys.exit(f"[ERREUR] Colonnes cibles manquantes : {missing_targets}")
 
-# Clean the 'average_salary' column that contains non-breaking spaces
-df['average_salary'] = df['average_salary'].astype(str).str.replace('\u202f', '').str.replace(' ', '').astype(float)
+# -- NOUVEAU FILTRE : on retire toutes les colonnes électorales ----------------
+def is_electoral(col: str) -> bool:
+    return col.startswith("vote_pct_") or col in orientations
 
-# NOW drop rows with missing values in critical columns if necessary
-critical_columns = ['criminality_indice', 'unemployment_rate', 'wealth_per_capita']
-df = df.dropna(subset=critical_columns)
-print(f"Nombre de lignes après suppression des NaN dans les colonnes critiques : {len(df)}")
-
-# Define features based on available columns
-features_cols = [
-    'criminality_indice', 'childs', 'adults', 'seniors',
-    'average_price_per_m2', 'average_salary', 'unemployment_rate',
-    'wealth_per_capita', 'immigration_rate', 'abstentions_pct',
+feature_cols = [
+    c for c in df.select_dtypes(include="number").columns
+    if not is_electoral(c) and c not in {"year"}
 ]
-
-# Vérification que les colonnes existent
-for col in features_cols:
-    if col not in df.columns:
-        raise ValueError(f"La colonne {col} n'existe pas dans le DataFrame.")
-
-# Check if the DataFrame is empty after cleaning
-if df.empty:
-    raise ValueError("Le DataFrame est vide après le nettoyage. Vérifiez les étapes de nettoyage.")
+print(f"\nTotal features SOCIO‑ÉCO retenues : {len(feature_cols)}")
 
 # -------------------------------------------------------------------
-# 3. ENTRAÎNER DES MODÈLES POUR CHAQUE ORIENTATION POLITIQUE
+# 3. DÉFINITION DES MODÈLES
 # -------------------------------------------------------------------
-# Créer un dictionnaire pour stocker les modèles
-models = {}
+model_defs = {
+    "RandomForest": RandomForestRegressor(
+        n_estimators=400, max_depth=None, random_state=args.seed
+    ),
+    "GradientBoosting": GradientBoostingRegressor(
+        n_estimators=600, learning_rate=0.05, subsample=0.9,
+        random_state=args.seed
+    ),
+    "LinearRegression": LinearRegression(),
+    "Ridge": Ridge(alpha=1.0),
+    "Lasso": Lasso(alpha=0.0005, max_iter=20_000),
+    "SVR": make_pipeline(StandardScaler(), SVR(C=10, epsilon=0.1)),
+    "kNN": make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=15)),
+}
 
-# Entraîner un modèle pour chaque orientation politique
-for orientation in orientations:
-    if orientation in df.columns:
-        y = df[orientation]
-        X = df[features_cols]
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        model.fit(X_train, y_train)
-        models[orientation] = model
-        
-        # Évaluer chaque modèle
-        y_pred = model.predict(X_test)
-        mse = mean_squared_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        print(f"\nModèle pour {orientation}:")
-        print(f"Erreur quadratique moyenne (MSE) : {mse:.2f}")
-        print(f"Coefficient de détermination (R²) : {r2:.2f}")
+# LightGBM / XGBoost si dispo
+try:
+    from lightgbm import LGBMRegressor
+    model_defs["LightGBM"] = LGBMRegressor(
+        n_estimators=600, learning_rate=0.05, subsample=0.9,
+        random_state=args.seed
+    )
+except ModuleNotFoundError:
+    pass
+
+try:
+    from xgboost import XGBRegressor
+    model_defs["XGBoost"] = XGBRegressor(
+        n_estimators=600, learning_rate=0.05, subsample=0.9,
+        random_state=args.seed, tree_method="hist"
+    )
+except ModuleNotFoundError:
+    pass
 
 # -------------------------------------------------------------------
-# 6. FAIRE DES PRÉDICTIONS POUR CHAQUE DÉPARTEMENT
+# 4. ENTRAÎNEMENT + VALIDATION CROISÉE
 # -------------------------------------------------------------------
-def predict_for_year(year, departements_data):
-    """
-    Prédit les pourcentages de vote pour chaque orientation politique
-    pour tous les départements pour une année donnée.
-    
-    :param year: L'année pour laquelle faire la prédiction
-    :param departements_data: DataFrame contenant les données par département
-    :return: DataFrame avec les prédictions
-    """
-    results = []
-    
-    for idx, row in departements_data.iterrows():
-        dept_code = row['department_code'] if 'department_code' in row else idx
-        
-        # Créer un DataFrame avec les caractéristiques du département
-        dept_features = pd.DataFrame({
-            'criminality_indice': [row['criminality_indice']],
-            'childs': [row['childs']],
-            'adults': [row['adults']],
-            'seniors': [row['seniors']],
-            'average_price_per_m2': [row['average_price_per_m2']],
-            'average_salary': [row['average_salary']],
-            'unemployment_rate': [row['unemployment_rate']],
-            'wealth_per_capita': [row['wealth_per_capita']],
-            'immigration_rate': [row['immigration_rate']],
-            'abstentions_pct': [row['abstentions_pct']]
+scoring = {
+    "mse": make_scorer(mean_squared_error, greater_is_better=False),
+    "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+    "r2":  make_scorer(r2_score),
+}
+cv = KFold(n_splits=5, shuffle=True, random_state=args.seed)
+
+all_scores = []       # pour export CSV
+fitted_models = {}    # orientation → meilleur modèle (après GridSearch)
+
+for target in orientations:
+    y = df[target]
+    X = df[feature_cols]
+
+    best_mse = np.inf
+    best_model_name = None
+    best_model_fitted = None
+
+    for name, model in model_defs.items():
+        cv_results = cross_validate(
+            model, X, y, cv=cv, scoring=scoring, return_train_score=False
+        )
+        mse_mean = -cv_results["test_mse"].mean()
+        mse_std  = cv_results["test_mse"].std()
+        rmse     = np.sqrt(mse_mean)
+        mae_mean = -cv_results["test_mae"].mean()
+        r2_mean  = cv_results["test_r2"].mean()
+
+        all_scores.append({
+            "orientation": target,
+            "model": name,
+            "mse": mse_mean,
+            "rmse": rmse,
+            "mae": mae_mean,
+            "r2": r2_mean,
+            "mse_std": mse_std,
         })
-        
-        # Prédiction pour chaque orientation
-        dept_result = {
-            'code_departement': dept_code,
-            'annee': year
+
+        if mse_mean < best_mse:
+            best_mse, best_model_name = mse_mean, name
+
+    # ----------------------------------------------------------------
+    # 4.1 GridSearch hyper‑paramètres sur le meilleur algo brut
+    # ----------------------------------------------------------------
+    print(f"\n[GRID] Affinage hyper‑paramètres pour {target} avec {best_model_name}")
+    if best_model_name == "RandomForest":
+        param_grid = {
+            "n_estimators": [300, 600, 900],
+            "max_depth": [None, 10, 20],
+            "min_samples_leaf": [1, 2, 5],
         }
-        
-        for orientation, model in models.items():
-            prediction = model.predict(dept_features)[0]
-            # S'assurer que la prédiction est entre 0 et 100
-            prediction = max(0, min(100, prediction))
-            dept_result[orientation] = prediction
-            
-        results.append(dept_result)
-    
-    return pd.DataFrame(results)
+    elif best_model_name == "GradientBoosting":
+        param_grid = {
+            "n_estimators": [400, 800],
+            "learning_rate": [0.05, 0.1],
+            "max_depth": [2, 3],
+        }
+    else:
+        param_grid = {}  # rien à optimiser ou peu pertinent
 
-# Exemple: Prédire pour l'année 2027
-# Note: On utilise le DataFrame original pour obtenir les données des départements
-# Si vous avez besoin d'ajuster les données pour 2027, faites-le ici
-predicted_results_2027 = predict_for_year(2027, df)
+    base_model = model_defs[best_model_name]
+    if param_grid:
+        grid = GridSearchCV(
+            base_model, param_grid, cv=cv,
+            scoring="neg_mean_squared_error", n_jobs=-1
+        )
+        grid.fit(X, y)
+        best_model_fitted = grid.best_estimator_
+        print(f"    ↳ meilleur jeu : {grid.best_params_}")
+    else:
+        best_model_fitted = base_model.fit(X, y)
 
-# Afficher les résultats
-print("\nPrédictions pour 2027:")
-print(predicted_results_2027.head())
+    fitted_models[target] = best_model_fitted
 
-# Ou exporter en CSV
-predicted_results_2027.to_csv('predictions_2027.csv', index=False)
-print("Résultats exportés dans 'predictions_2027.csv'")
+    # ----------------------------------------------------------------
+    # 4.2 Feature importances si dispo
+    # ----------------------------------------------------------------
+    if hasattr(best_model_fitted, "feature_importances_"):
+        fi = (
+            pd.Series(best_model_fitted.feature_importances_, index=feature_cols)
+              .sort_values(ascending=False)
+        )
+        fi.to_csv(f"feature_importance_{target}_{best_model_name}.csv")
+        print(f"[INFO] feature_importance_{target}_{best_model_name}.csv sauvegardé")
+
+# -------------------------------------------------------------------
+# 5. EXPORT DES SCORES COMPARATIFS
+# -------------------------------------------------------------------
+scores_df = pd.DataFrame(all_scores).sort_values(
+    ["orientation", "mse"]
+).reset_index(drop=True)
+
+scores_df.to_csv("model_scores.csv", index=False)
+print("\n=================  COMPARATIF (cross‑val. 5‑fold)  =================")
+print(scores_df.to_string(index=False, float_format=lambda x: f"{x:8.3f}"))
+print("\n(✓) Fichier 'model_scores.csv' exporté.")
+
+# -------------------------------------------------------------------
+# 6. PRÉDICTIONS GÉNÉRIQUES
+# -------------------------------------------------------------------
+def predict_for_year(year: int, data: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for idx, row in data.iterrows():
+        dept_code = row.get("department_code", idx)
+
+        feat_vec = pd.DataFrame({c: [row[c]] for c in feature_cols})
+
+        pred_row = {"code_departement": dept_code, "annee": year}
+        for target, mdl in fitted_models.items():
+            pred = mdl.predict(feat_vec)[0]
+            pred_row[target] = max(0, min(100, pred))
+        rows.append(pred_row)
+    return pd.DataFrame(rows)
+
+# Exemple : année 2027
+pred_2027 = predict_for_year(2027, df)
+pred_2027.to_csv("predictions_2027.csv", index=False)
+print("\n---------------- APERÇU PRÉDICTIONS 2027 ----------------")
+print(pred_2027.head())
+print("\n(✓) Fichier 'predictions_2027.csv' exporté.")
