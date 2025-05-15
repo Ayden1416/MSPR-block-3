@@ -20,3 +20,14 @@ REAL_ESTATE_2022_DATASET = "data/real_estate/Real Estate Indicators 2022.csv"
 AVERAGE_SALARY_2012_DATASET = "data/average_salary/revenus_2012.csv"
 AVERAGE_SALARY_2017_DATASET = "data/average_salary/revenus_2017.csv"
 AVERAGE_SALARY_2022_DATASET = "data/average_salary/revenus_2022.csv"
+
+DENSITY_2012_DATASET = "data/density/density-2012.csv"
+DENSITY_2017_DATASET = "data/density/density-2017.csv"
+DENSITY_2022_DATASET = "data/density/density-2022.csv"
+
+NATALITY_2012_DATASET = "data/natality/natality_2012.xlsx"
+NATALITY_2017_DATASET = "data/natality/natality_2017.xlsx"
+NATALITY_2022_DATASET = "data/natality/natality_2022.xlsx"
+
+MEDIAN_INCOME_2017_DATASET = "data/median_standard_living/median_2017.xlsx"
+MEDIAN_INCOME_2022_DATASET = "data/median_standard_living/median_2022.xlsx"

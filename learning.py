@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-# coding: utf-8
-"""
-learning_comparison.py – Évaluation multi‑modèles + prédictions 2027
-"""
+# -*- coding: utf-8 -*-
 from __future__ import annotations
-import argparse
 import sys
+import os
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
 import sqlite3
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import (
     train_test_split, KFold, cross_validate, GridSearchCV
@@ -18,8 +17,10 @@ from sklearn.model_selection import (
 from sklearn.metrics import (
     mean_squared_error, mean_absolute_error, r2_score, make_scorer
 )
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import make_pipeline, Pipeline
+from sklearn.impute import SimpleImputer
 from sklearn.ensemble import (
     RandomForestRegressor, GradientBoostingRegressor
 )
@@ -27,279 +28,581 @@ from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 
-# Configuration
+#===================================================#
+#               PATH CONFIGURATION                  #
+#===================================================#
+
+BASE_PATH_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_PATH_SCRIPT, "..", ".."))
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Configuration settings
 DB_FILE = Path("data/dataset.sqlite")
 TABLE_NAME = "department_stats"
+RESULTS_DIR = Path("results")
+PLOTS_DIR = Path(RESULTS_DIR / "plots")
+REPORTS_DIR = Path(RESULTS_DIR / "reports")
 
-# Paramètres généraux & ligne de commande
-parser = argparse.ArgumentParser(
-    description="Apprentissage multi‑modèles sur les stats départementales"
-)
-parser.add_argument("--seed", type=int, default=42,
-                    help="Graine aléatoire pour la reproductibilité")
-parser.add_argument("--drop-threshold", type=float, default=0.40,
-                    metavar="[0‑1]",
-                    help="Au‑delà de ce pourcentage de NaN, on supprime la colonne")
-parser.add_argument("--print-width", type=int, default=110,
-                    help="Largeur (en colonnes) pour les audits NaN")
+# Constants
+SEED = 42
+DROP_THRESHOLD = 0.40
+PRINT_WIDTH = 110
 
-args = parser.parse_args()
+for directory in [RESULTS_DIR, PLOTS_DIR, REPORTS_DIR]:
+    directory.mkdir(exist_ok=True, parents=True)
 
-# Constantes dérivées des arguments
-DROP_THRESHOLD = args.drop_threshold
-PRINT_WIDTH   = args.print_width
+np.random.seed(SEED)
 
-# Pour les modèles + CV
-np.random.seed(args.seed)
+# Configure plot settings
+sns.set(style="whitegrid")
+plt.rcParams["figure.figsize"] = (12, 8)
+plt.rcParams["figure.dpi"] = 100
 
-# Lecture du jeu de données depuis SQLite
-if not DB_FILE.exists():
-    raise FileNotFoundError(
-        f"Impossible de trouver {DB_FILE.resolve()} – "
-        "assurez‑vous d’avoir exécuté le script de génération d’abord."
-    )
+#===================================================#
+#              DATA HANDLING FUNCTIONS              #
+#===================================================#
 
-with sqlite3.connect(DB_FILE) as conn:
-    query = f"SELECT * FROM {TABLE_NAME};"
-    df = pd.read_sql_query(query, conn)
-
-df["department_code"] = df["department_code"].astype(str)
-
-print(f"{len(df):,} lignes importées depuis {DB_FILE.name}")
-print(df.head())
-
-# Audit des NaN & nettoyage
-def audit_nan(frame: pd.DataFrame, title: str) -> None:
-    nan_stats = frame.isnull().mean().mul(100).sort_values(ascending=False)
-    print(f"\n{title}".center(PRINT_WIDTH, "="))
-    print(nan_stats.to_string(float_format=lambda x: f"{x:5.1f}%"))
-
-audit_nan(df, "POURCENTAGE DE NaN AVANT NETTOYAGE")
-
-# Colonnes trop vides → suppression
-too_empty = [c for c, pct in df.isnull().mean().items() if pct > DROP_THRESHOLD]
-if too_empty:
-    print(f"\n[INFO] Suppression des colonnes trop vides (> {DROP_THRESHOLD*100:.0f}% NaN) :\n → {too_empty}")
-    df = df.drop(columns=too_empty)
-
-# Imputation
-numeric_cols = df.select_dtypes(include="number").columns
-for col in numeric_cols:
-    if df[col].isnull().any():
-        fill_value = df[col].median() if df[col].skew() > 1 else df[col].mean()
-        df[col] = df[col].fillna(fill_value)
-
-audit_nan(df, "POURCENTAGE DE NaN APRÈS IMPUTATION")
-
-# Colonnes cibles & features
-orientations = [
-    "vote_orientation_pct_Gauche",
-    "vote_orientation_pct_Droite",
-    "vote_orientation_pct_Centre",
-]
-
-# Vérifier leur présence
-missing_targets = [o for o in orientations if o not in df.columns]
-if missing_targets:
-    sys.exit(f"[ERREUR] Colonnes cibles manquantes : {missing_targets}")
-
-# Nouveau filtre : on retire toutes les colonnes électorales
-def is_electoral(col: str) -> bool:
-    return col.startswith("vote_pct_") or col in orientations
-
-feature_cols = [
-    c for c in df.select_dtypes(include="number").columns
-    if not is_electoral(c) and c not in {"year"}
-]
-print(f"\nTotal features SOCIO‑ÉCO retenues : {len(feature_cols)}")
-
-# Définition des modèles
-model_defs = {
-    "RandomForest": RandomForestRegressor(
-        n_estimators=400, max_depth=None, random_state=args.seed
-    ),
-    "GradientBoosting": GradientBoostingRegressor(
-        n_estimators=600, learning_rate=0.05, subsample=0.9,
-        random_state=args.seed
-    ),
-    "LinearRegression": LinearRegression(),
-    "Ridge": Ridge(alpha=1.0),
-    "Lasso": Lasso(alpha=0.0005, max_iter=20_000),
-    "SVR": make_pipeline(StandardScaler(), SVR(C=10, epsilon=0.1)),
-    "kNN": make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=15)),
-}
-
-# LightGBM / XGBoost si dispo
-try:
-    from lightgbm import LGBMRegressor
-    model_defs["LightGBM"] = LGBMRegressor(
-        n_estimators=600, learning_rate=0.05, subsample=0.9,
-        random_state=args.seed
-    )
-except ModuleNotFoundError:
-    pass
-
-try:
-    from xgboost import XGBRegressor
-    model_defs["XGBoost"] = XGBRegressor(
-        n_estimators=600, learning_rate=0.05, subsample=0.9,
-        random_state=args.seed, tree_method="hist"
-    )
-except ModuleNotFoundError:
-    pass
-
-# Entraînement + validation croisée
-scoring = {
-    "mse": make_scorer(mean_squared_error, greater_is_better=False),
-    "mae": make_scorer(mean_absolute_error, greater_is_better=False),
-    "r2":  make_scorer(r2_score),
-}
-cv = KFold(n_splits=5, shuffle=True, random_state=args.seed)
-
-all_scores = []
-fitted_models = {}
-
-for target in orientations:
-    y = df[target]
-    X = df[feature_cols]
-
-    best_mse = np.inf
-    best_model_name = None
-    best_model_fitted = None
-
-    for name, model in model_defs.items():
-        cv_results = cross_validate(
-            model, X, y, cv=cv, scoring=scoring, return_train_score=False
+def load_data(db_path: Path, table_name: str) -> pd.DataFrame:
+    if not db_path.exists():
+        raise FileNotFoundError(
+            f"Unable to find {db_path.resolve()} – "
+            "make sure you have the database."
         )
-        mse_mean = -cv_results["test_mse"].mean()
-        mse_std  = cv_results["test_mse"].std()
-        rmse     = np.sqrt(mse_mean)
-        mae_mean = -cv_results["test_mae"].mean()
-        r2_mean  = cv_results["test_r2"].mean()
 
-        all_scores.append({
-            "orientation": target,
-            "model": name,
-            "mse": mse_mean,
-            "rmse": rmse,
-            "mae": mae_mean,
-            "r2": r2_mean,
-            "mse_std": mse_std,
-        })
+    with sqlite3.connect(db_path) as conn:
+        tables = pd.read_sql_query(
+            "SELECT name FROM sqlite_master WHERE type='table';", conn
+        )
+        if table_name not in tables["name"].values:
+            print(f"Table {table_name} not found. Attempting to merge available tables...")
+            return load_and_merge_all_tables(conn)
+        
+        query = f"SELECT * FROM {table_name};"
+        df = pd.read_sql_query(query, conn)
 
-        if mse_mean < best_mse:
-            best_mse, best_model_name = mse_mean, name
+    if "department_code" in df.columns:
+        df["department_code"] = df["department_code"].astype(str)
+        
+    print(f"{len(df):,} rows imported from {db_path.name}")
+    return df
 
-    # GridSearch sur le meilleur algo brut
-    print(f"\n[GRID] Affinage hyper‑paramètres pour {target} avec {best_model_name}")
-    if best_model_name == "RandomForest":
-        param_grid = {
-            "n_estimators": [300, 600, 900],
-            "max_depth": [None, 10, 20],
-            "min_samples_leaf": [1, 2, 5],
-        }
-    elif best_model_name == "GradientBoosting":
-        param_grid = {
-            "n_estimators": [400, 800],
-            "learning_rate": [0.05, 0.1],
-            "max_depth": [2, 3],
-        }
+
+def load_and_merge_all_tables(conn: sqlite3.Connection) -> pd.DataFrame:
+    tables = pd.read_sql_query(
+        "SELECT name FROM sqlite_master WHERE type='table';", conn
+    )
+    data_frames = {}
+    excluded_tables = ["sqlite_sequence"]
+    
+    for table_name in tables["name"].tolist():
+        if table_name in excluded_tables:
+            continue
+            
+        print(f"Loading table: {table_name}")
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+            if "year" in df.columns:
+                df["year"] = pd.to_numeric(df["year"], errors="coerce")
+            data_frames[table_name] = df
+            print(f"  Loaded {table_name} with {df.shape[0]} rows and {df.shape[1]} columns")
+        except Exception as e:
+            print(f"Error loading {table_name}: {e}")
+    
+    if "elections" in data_frames:
+        merged_df = data_frames["elections"].copy()
+        
+        tables_to_merge = [
+            "department_population", "criminality", "immigration", "wealth_per_capita", 
+            "average_salary", "natality", "niveau_de_vie_median", "unemployment", "real_estate"
+        ]
+        
+        for table_name in tables_to_merge:
+            if table_name in data_frames and not data_frames[table_name].empty:
+                df_to_join = data_frames[table_name].copy()
+                id_cols_to_drop = [col for col in df_to_join.columns if col.endswith("_id")]
+                df_to_join = df_to_join.drop(columns=id_cols_to_drop, errors="ignore")
+                
+                merged_df = pd.merge(
+                    merged_df, df_to_join, 
+                    on=["department_code", "year"], how="left", 
+                    suffixes=("", f"_{table_name}")
+                )
+        
+        if "departments" in data_frames:
+            dept_df = data_frames["departments"].copy()
+            merged_df = pd.merge(merged_df, dept_df, on="department_code", how="left")
+        
+        print(f"Merged data: {merged_df.shape[0]} rows and {merged_df.shape[1]} columns")
+        return merged_df
     else:
-        param_grid = {}
+        print("Table 'elections' not found. Unable to merge data.")
+        return pd.DataFrame()
 
-    base_model = model_defs[best_model_name]
-    if param_grid:
-        grid = GridSearchCV(
-            base_model, param_grid, cv=cv,
-            scoring="neg_mean_squared_error", n_jobs=-1
-        )
-        grid.fit(X, y)
-        best_model_fitted = grid.best_estimator_
-        print(f"    ↳ meilleur jeu : {grid.best_params_}")
+
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    too_empty = [c for c, pct in df.isnull().mean().items() if pct > DROP_THRESHOLD]
+    if too_empty:
+        print(f"\n[INFO] Removing columns with too many missing values (> {DROP_THRESHOLD*100:.0f}% NaN):\n → {too_empty}")
+        df = df.drop(columns=too_empty)
+    
+    numeric_cols = df.select_dtypes(include="number").columns
+    for col in numeric_cols:
+        if df[col].isnull().any():
+            fill_value = df[col].median() if df[col].skew() > 1 else df[col].mean()
+            df[col] = df[col].fillna(fill_value)
+            print(f"Imputing {col} with {'median' if df[col].skew() > 1 else 'mean'}")
+    
+    cat_cols = df.select_dtypes(include=["object", "category"]).columns
+    for col in cat_cols:
+        if df[col].isnull().any():
+            mode_value = df[col].mode()[0]
+            df[col] = df[col].fillna(mode_value)
+            print(f"Imputing {col} with mode: {mode_value}")
+    
+    return df
+
+
+def identify_features_targets(df: pd.DataFrame) -> tuple[list, list]:
+    orientation_targets = [
+        col for col in df.columns 
+        if col.startswith("vote_orientation_pct_")
+    ]
+    
+    if not orientation_targets:
+        print("[WARNING] No political orientation columns found.")
+        potential_targets = [
+            col for col in df.columns 
+            if col.startswith("vote_pct_") or "gagnant" in col.lower()
+        ]
+        
+        if potential_targets:
+            print(f"Potential targets found: {potential_targets}")
+            orientation_targets = potential_targets[:3]
+    
+    exclude_patterns = ["_id", "vote_", "parti_", "tour_", "orientation_"]
+    feature_cols = [
+        col for col in df.select_dtypes(include="number").columns
+        if col not in {"election_id", "year"} and 
+        not any(pattern in col for pattern in exclude_patterns)
+    ]
+    
+    print(f"\nSelected features ({len(feature_cols)}): {feature_cols[:5]}{'...' if len(feature_cols) > 5 else ''}")
+    print(f"Selected targets ({len(orientation_targets)}): {orientation_targets}")
+    
+    return feature_cols, orientation_targets
+
+#===================================================#
+#              VISUALIZATION FUNCTIONS              #
+#===================================================#
+
+def visualize_data_distribution(df: pd.DataFrame) -> None:
+    orientations = [col for col in df.columns if col.startswith("vote_orientation_pct_")]
+    if orientations:
+        plt.figure(figsize=(12, 8))
+        df[orientations].mean().plot(kind="bar", color="seagreen")
+        plt.title("Average political orientation distribution", fontsize=14)
+        plt.ylabel("Average percentage (%)")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / "orientation_distribution.png")
+        plt.close()
+    
+    socio_eco_vars = [
+        "unemployment_rate", "average_salary", "immigration_rate", 
+        "wealth_per_capita", "criminality_indice"
+    ]
+    
+    existing_vars = [var for var in socio_eco_vars if var in df.columns][:3]
+    
+    if len(existing_vars) >= 2:
+        fig, axes = plt.subplots(len(existing_vars), 1, figsize=(12, 3*len(existing_vars)))
+        if len(existing_vars) == 1:
+            axes = [axes]
+            
+        for i, var in enumerate(existing_vars):
+            sns.histplot(df[var].dropna(), kde=True, ax=axes[i], color="royalblue")
+            axes[i].set_title(f"Distribution of {var}", fontsize=12)
+            axes[i].set_ylabel("Frequency")
+            
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / "socio_eco_distributions.png")
+        plt.close()
+
+
+def visualize_correlations(df: pd.DataFrame, features: list, targets: list) -> None:
+    corr = df[features + targets].corr()
+    plt.figure(figsize=(16, 14))
+    sns.heatmap(corr, cmap="coolwarm", center=0, annot=True, square=True, linewidths=.5)
+    plt.title("Correlation matrix (features and targets)", fontsize=16)
+    plt.tight_layout()
+    plt.savefig(PLOTS_DIR / "correlation_heatmap_full.png")
+    plt.close()
+    
+    if targets:
+        target = targets[0]
+        plt.figure(figsize=(14, 10))
+        target_corrs = df[features].corrwith(df[target]).sort_values(ascending=False)
+        top_n = 10
+        top_corrs = pd.concat([target_corrs.head(top_n), target_corrs.tail(top_n)]).sort_values(ascending=True)
+        colors = ['crimson' if x < 0 else 'forestgreen' for x in top_corrs]
+        top_corrs.plot(kind='barh', figsize=(12, 10), color=colors)
+        plt.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+        plt.title(f"Top correlations with {target}", fontsize=14)
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / f"key_correlations_{target.lower().replace('%', 'pct')}.png")
+        plt.close()
+
+
+def visualize_residuals(X, y, model, target_name, model_name):
+    y_pred = model.predict(X)
+    plt.figure(figsize=(10, 8))
+    plt.scatter(y, y_pred, alpha=0.6, color="royalblue")
+    plt.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=2)
+    plt.xlabel('Actual values (%)')
+    plt.ylabel('Predicted values (%)')
+    plt.title(f'{target_name} - Actual vs. Predicted ({model_name})')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(PLOTS_DIR / f"actual_vs_predicted_{target_name.lower().replace('%', 'pct')}_{model_name}.png")
+    plt.close()
+    
+
+def analyze_feature_importance(model, features, target_name, model_name):
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        importances = np.abs(model.coef_)
     else:
-        best_model_fitted = base_model.fit(X, y)
+        print(f"[WARNING] Unable to extract feature importance for {model_name}")
+        return None
+    
+    if len(importances) == len(features):
+        feature_importance = pd.Series(importances, index=features).sort_values(ascending=False)
+        
+        csv_path = REPORTS_DIR / f"feature_importance_{target_name.lower().replace('%', 'pct')}_{model_name}.csv"
+        feature_importance.to_csv(csv_path)
+        print(f"[INFO] Feature importance saved: {csv_path}")
+        
+        plt.figure(figsize=(12, 8))
+        top_features = feature_importance.head(10)
+        top_features.sort_values().plot.barh(color='darkgreen')
+        plt.title(f"Top 10 features for {target_name}", fontsize=14)
+        plt.xlabel('Relative importance')
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / f"top10_features_{target_name.lower().replace('%', 'pct')}.png")
+        plt.close()
+        
+        return feature_importance
+    else:
+        print(f"[ERROR] Incompatible dimensions for importances: {len(importances)} vs {len(features)}")
+        return None
 
-    fitted_models[target] = best_model_fitted
-
-    # Feature importances si dispo
-    if hasattr(best_model_fitted, "feature_importances_"):
-        fi = (
-            pd.Series(best_model_fitted.feature_importances_, index=feature_cols)
-              .sort_values(ascending=False)
+def visualize_predictions(predictions_df, year):
+    orientation_cols = [
+        col for col in predictions_df.columns 
+        if col.startswith("vote_orientation_pct_") or col.startswith("vote_pct_")
+    ]
+    
+    if not orientation_cols:
+        print("[WARNING] No orientation columns found for visualizations")
+        return
+    
+    plt.figure(figsize=(12, 8))
+    
+    orientation_means = predictions_df[orientation_cols].mean()
+    orientation_means.sort_values(ascending=False).plot(
+        kind='bar', 
+        color='darkblue', 
+        alpha=0.7
+    )
+    
+    plt.title(f"Predicted political orientations for {year}", fontsize=14)
+    plt.ylabel("Average predicted percentage (%)")
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(PLOTS_DIR / f"predictions_{year}_summary.png")
+    plt.close()
+    
+    for orientation in orientation_cols:
+        top_depts = predictions_df.sort_values(orientation, ascending=False)[
+            ['code_departement', orientation]
+        ].head(10)
+        
+        plt.figure(figsize=(12, 8))
+        sns.barplot(
+            data=top_depts,
+            y='code_departement',
+            x=orientation,
         )
-        fi.to_csv(f"annexes/feature_importance_{target}_{best_model_name}.csv")
-        print(f"[INFO] feature_importance_{target}_{best_model_name}.csv sauvegardé")
+        plt.title(f"Top 10 departments for {orientation} ({year})", fontsize=14)
+        plt.xlabel("Predicted percentage (%)")
+        plt.ylabel("Department code")
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / f"predictions_{year}_top_depts_{orientation}.png")
+        plt.close()
 
-# Export des scores comparatifs
-scores_df = pd.DataFrame(all_scores).sort_values(
-    ["orientation", "mse"]
-).reset_index(drop=True)
+#===================================================#
+#              MODELING FUNCTIONS                   #
+#===================================================#
 
-scores_df.to_csv("annexes/model_scores.csv", index=False)
-print("\n=================  COMPARATIF (cross‑val. 5‑fold)  =================")
-print(scores_df.to_string(index=False, float_format=lambda x: f"{x:8.3f}"))
-print("\n(✓) Fichier 'model_scores.csv' exporté.")
+def train_and_evaluate_models(df: pd.DataFrame, features: list, targets: list) -> dict:
+    model_defs = {
+        "RandomForest": RandomForestRegressor(n_estimators=400, max_depth=None, random_state=SEED),
+        "GradientBoosting": GradientBoostingRegressor(n_estimators=600, learning_rate=0.05, subsample=0.9, random_state=SEED),
+        "LinearRegression": LinearRegression(),
+        "Ridge": Ridge(alpha=1.0),
+        "Lasso": Lasso(alpha=0.0005, max_iter=20_000),
+        "SVR": make_pipeline(StandardScaler(), SVR(C=10, epsilon=0.1)),
+        "kNN": make_pipeline(StandardScaler(), KNeighborsRegressor(n_neighbors=15)),
+    }
+    
+    try:
+        from lightgbm import LGBMRegressor
+        model_defs["LightGBM"] = LGBMRegressor(n_estimators=600, learning_rate=0.05, subsample=0.9, random_state=SEED)
+        print("[INFO] LightGBM available and added to models.")
+    except ModuleNotFoundError:
+        print("[INFO] LightGBM not available, ignored.")
+    
+    try:
+        from xgboost import XGBRegressor
+        model_defs["XGBoost"] = XGBRegressor(n_estimators=600, learning_rate=0.05, subsample=0.9, random_state=SEED, tree_method="hist")
+        print("[INFO] XGBoost available and added to models.")
+    except ModuleNotFoundError:
+        print("[INFO] XGBoost not available, ignored.")
+    
+    scoring = {
+        "mse": make_scorer(mean_squared_error, greater_is_better=False),
+        "mae": make_scorer(mean_absolute_error, greater_is_better=False),
+        "r2":  make_scorer(r2_score),
+    }
+    
+    cv = KFold(n_splits=5, shuffle=True, random_state=SEED)
+    
+    all_scores = []
+    fitted_models = {}
+    
+    for target_idx, target in enumerate(targets):
+        print(f"\n{'='*80}\nModeling for {target}\n{'='*80}")
+        
+        y = df[target]
+        X = df[features]
+        
+        best_mse = np.inf
+        best_model_name = None
+        best_model_fitted = None
+        
+        models_results = []
+        
+        for name, model in model_defs.items():
+            print(f"Evaluating {name}...")
+            cv_results = cross_validate(model, X, y, cv=cv, scoring=scoring, return_train_score=False)
+            
+            mse_mean = -cv_results["test_mse"].mean()
+            mse_std  = cv_results["test_mse"].std()
+            rmse     = np.sqrt(mse_mean)
+            mae_mean = -cv_results["test_mae"].mean()
+            r2_mean  = cv_results["test_r2"].mean()
+            
+            model_result = {
+                "orientation": target,
+                "model": name,
+                "mse": mse_mean,
+                "rmse": rmse,
+                "mae": mae_mean,
+                "r2": r2_mean,
+                "mse_std": mse_std,
+            }
+            
+            all_scores.append(model_result)
+            models_results.append(model_result)
+            
+            if mse_mean < best_mse:
+                best_mse, best_model_name = mse_mean, name
+        
+        models_df = pd.DataFrame(models_results).sort_values("rmse")
+        print("\nModel comparison:")
+        print(models_df.to_string(index=False, float_format=lambda x: f"{x:8.3f}"))
+        
+        print(f"\n[GRID] Fine-tuning hyperparameters for {target} with {best_model_name}")
+        
+        if best_model_name == "RandomForest":
+            param_grid = {
+                "n_estimators": [300, 600, 900],
+                "max_depth": [None, 10, 20],
+                "min_samples_leaf": [1, 2, 5],
+            }
+        elif best_model_name == "GradientBoosting":
+            param_grid = {
+                "n_estimators": [400, 800],
+                "learning_rate": [0.05, 0.1],
+                "max_depth": [2, 3],
+            }
+        elif best_model_name == "LightGBM":
+            param_grid = {
+                "n_estimators": [400, 800],
+                "learning_rate": [0.05, 0.1],
+                "num_leaves": [31, 63],
+            }
+        elif best_model_name == "XGBoost":
+            param_grid = {
+                "n_estimators": [400, 800],
+                "learning_rate": [0.05, 0.1],
+                "max_depth": [3, 6],
+            }
+        elif best_model_name == "SVR":
+            param_grid = {
+                "svr__C": [1, 10, 100],
+                "svr__epsilon": [0.1, 0.2],
+            }
+        elif best_model_name == "kNN":
+            param_grid = {
+                "kneighborsregressor__n_neighbors": [5, 10, 15, 20],
+                "kneighborsregressor__weights": ["uniform", "distance"],
+            }
+        elif best_model_name in ["Ridge", "Lasso"]:
+            param_grid = {
+                "alpha": [0.1, 0.5, 1.0, 5.0, 10.0],
+            }
+        else:
+            param_grid = {}
+        
+        base_model = model_defs[best_model_name]
+        if param_grid:
+            grid = GridSearchCV(base_model, param_grid, cv=cv, scoring="neg_mean_squared_error", n_jobs=-1)
+            grid.fit(X, y)
+            best_model_fitted = grid.best_estimator_
+            print(f"    ↳ Best parameters: {grid.best_params_}")
+            print(f"    ↳ Optimized MSE: {-grid.best_score_:.4f}")
+        else:
+            best_model_fitted = base_model.fit(X, y)
+            print("    ↳ No hyperparameter optimization for this model.")
+        
+        fitted_models[target] = best_model_fitted
+        
+        visualize_residuals(X, y, best_model_fitted, target, best_model_name)
+        
+        # if (target_idx == 0 or models_df.iloc[0]["r2"] > 0.8) and hasattr(best_model_fitted, "feature_importances_"):
+        feature_importance = analyze_feature_importance(best_model_fitted, features, target, best_model_name)
+    
+    scores_df = pd.DataFrame(all_scores).sort_values(["orientation", "mse"]).reset_index(drop=True)
+    
+    scores_path = REPORTS_DIR / "model_scores.csv"
+    scores_df.to_csv(scores_path, index=False)
+    print(f"\n(✓) Model comparison exported: {scores_path}")
+    
+    return fitted_models
 
-# Prédictions génériques
-def predict_for_year(year: int, data: pd.DataFrame) -> pd.DataFrame:
+
+def predict_for_future(year, fitted_models, features, departments_data=None, df_clean=None):
+    print(f"\n{'='*80}\nGenerating predictions for year {year}\n{'='*80}")
+    if departments_data is None:
+        if df_clean is not None:
+            try:
+                last_year = df_clean['year'].max()
+                print(f"[INFO] Using data from year {last_year} as base")
+                departments_data = df_clean[df_clean['year'] == last_year].copy()
+            except (KeyError, ValueError) as e:
+                print(f"[ERROR] Problem with dataframe: {e}")
+                return pd.DataFrame()
+        else:
+            print("[ERROR] Cleaned DataFrame not provided")
+            return pd.DataFrame()
+    if departments_data.empty:
+        print("[ERROR] No departmental data available")
+        return pd.DataFrame()
+    print(f"[INFO] Preparing predictions for {len(departments_data)} departments")
     rows = []
-    for idx, row in data.iterrows():
-        dept_code = row.get("department_code", idx)
-
-        feat_vec = pd.DataFrame({c: [row[c]] for c in feature_cols})
-
-        pred_row = {"code_departement": dept_code, "annee": year}
-        for target, mdl in fitted_models.items():
-            pred = mdl.predict(feat_vec)[0]
-            pred_row[target] = max(0, min(100, pred))
+    for idx, row in departments_data.iterrows():
+        if 'department_code' in row:
+            dept_code = row['department_code']
+        elif 'code_departement' in row:
+            dept_code = row['code_departement']
+        else:
+            dept_code = f"Dept_{idx}"
+        existing_features = [f for f in features if f in row]
+        if len(existing_features) < len(features):
+            missing_features = set(features) - set(existing_features)
+            print(f"[WARNING] Missing features for {dept_code}: {missing_features}")
+            if len(existing_features) < len(features) * 0.7:
+                print(f"[ERROR] Too many missing features for {dept_code}, prediction impossible")
+                continue
+        feat_vec = {}
+        for f in features:
+            if f in row:
+                feat_vec[f] = [row[f]]
+            else:
+                feat_vec[f] = [departments_data[f].median() if f in departments_data.columns else 0]
+        feat_df = pd.DataFrame(feat_vec)
+        pred_row = {
+            "code_departement": dept_code,
+            "annee": year
+        }
+        for target, model in fitted_models.items():
+            try:
+                pred = model.predict(feat_df)[0]
+                pred_row[target] = max(0, min(100, pred))
+            except Exception as e:
+                print(f"[ERROR] Unable to predict {target} for {dept_code}: {e}")
+                pred_row[target] = None
         rows.append(pred_row)
-    return pd.DataFrame(rows)
+    if not rows:
+        print("[ERROR] No predictions could be generated")
+        return pd.DataFrame()
+    predictions_df = pd.DataFrame(rows)
+    out_path = REPORTS_DIR / f"predictions_{year}.csv"
+    predictions_df.to_csv(out_path, index=False)
+    print(f"(✓) {year} predictions saved: {out_path}")
+    visualize_predictions(predictions_df, year)
+    return predictions_df
 
-# Exemple : année 2027
-pred_2027 = predict_for_year(2027, df)
-pred_2027.to_csv("predictions_2027.csv", index=False)
-print("\n---------------- APERÇU PRÉDICTIONS 2027 ----------------")
-print(pred_2027.head())
-print("\n(✓) Fichier 'predictions_2027.csv' exporté.")
+#===================================================#
+#                 MAIN EXECUTION                    #
+#===================================================#
 
-# Génération des figures
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
+def main():
+    
+    print(f"{'='*40} MULTI-MODEL ELECTORAL ANALYSIS {'='*40}")
+    print(f"Configuration: Seed={SEED}, NaN Threshold={DROP_THRESHOLD*100:.0f}%")
+    
+    #----------------- DATA LOADING -----------------#
+    try:
+        df = load_data(DB_FILE, TABLE_NAME)
+    except Exception as e:
+        print(f"[ERROR] Failed to load data: {e}")
+        return
+    
+    #----------------- DATA CLEANING -----------------#
+    df_clean = clean_data(df)
+    
+    #----------------- EXPLORATORY VISUALIZATION -----------------#
+    print("\nCreating exploratory visualizations...")
+    visualize_data_distribution(df_clean)
+    
+    #----------------- FEATURE SELECTION -----------------#
+    features, targets = identify_features_targets(df_clean)
+    
+    if not targets:
+        print("[ERROR] No targets identified. Stopping program.")
+        return
+    
+    #----------------- CORRELATION ANALYSIS -----------------#
+    print("\nAnalyzing correlations...")
+    visualize_correlations(df_clean, features, targets)
+    
+    #----------------- MODEL TRAINING -----------------#
+    print("\nTraining and evaluating models...")
+    fitted_models = train_and_evaluate_models(df_clean, features, targets)
+    
+    #----------------- FUTURE PREDICTIONS -----------------#
+    print("\nGenerating predictions...")
+    predict_for_future(2027, fitted_models, features, df_clean=df_clean)
+    
+    print(f"\n{'='*40} ANALYSIS COMPLETED {'='*40}")
+    print(f"Results available in directory {RESULTS_DIR}")
 
-# Corrélation (features + cibles)
-corr = df[feature_cols + orientations].corr()
-fig, ax = plt.subplots(figsize=(12,10))
-sns.heatmap(corr, cmap="coolwarm", center=0, annot=False, ax=ax)
-ax.set_title("Heatmap de corrélation features vs cibles")
-fig.savefig("figures/correlation_heatmap.png", dpi=300)
-print("Figure enregistrée → figures/correlation_heatmap.png")
 
-# Importance des variables pour chaque orientation
-for target, mdl in fitted_models.items():
-    if hasattr(mdl, "feature_importances_"):
-        fi = pd.Series(mdl.feature_importances_, index=feature_cols)\
-               .sort_values(ascending=False).head(20)
-        fig, ax = plt.subplots(figsize=(8,6))
-        fi.plot.bar(ax=ax)
-        ax.set_ylabel("Importance")
-        ax.set_title(f"Feature importances – {target}")
-        out = f"figures/feature_importance_{target}.png"
-        fig.tight_layout()
-        fig.savefig(out, dpi=300)
-        print(f"Figure enregistrée → {out}")
-
-# Réel vs Prédit (cross-val ou prédictions 2027)
-pred_2027 = pd.read_csv("predictions_2027.csv")
-for target in orientations:
-    fig, ax = plt.subplots(figsize=(6,6))
-    ax.scatter(df[target], pred_2027[target], alpha=0.6)
-    ax.plot([0,100],[0,100], "--", linewidth=1)
-    ax.set_xlabel("Valeurs historiques")
-    ax.set_ylabel("Prédictions 2027")
-    ax.set_title(f"Historique vs Prédit – {target}")
-    out = f"figures/history_vs_pred_{target}.png"
-    fig.tight_layout()
-    fig.savefig(out, dpi=300)
-    print(f"Figure enregistrée → {out}")
+if __name__ == "__main__":
+    main()
